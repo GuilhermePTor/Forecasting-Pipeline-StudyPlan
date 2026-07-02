@@ -280,33 +280,6 @@
     }
   ];
 
-  // Paste your own Firebase config here — see the setup steps in chat.
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDjMAHMlVJ5FqDl8bovdJVPbGZnbz-UKPs",
-  authDomain: "study-schedule-1b5a0.firebaseapp.com",
-  databaseURL: "https://study-schedule-1b5a0-default-rtdb.firebaseio.com",
-  projectId: "study-schedule-1b5a0",
-  storageBucket: "study-schedule-1b5a0.firebasestorage.app",
-  messagingSenderId: "836373344596",
-  appId: "1:836373344596:web:b3163904495bd1272118c1",
-  measurementId: "G-Z5NW91VGFS"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-  const progressRef = db.ref('study-schedule-progress');
-
   function fmtHM(min){
     const h = Math.floor(min/60), m = Math.round(min%60);
     if (h <= 0) return m + 'm';
@@ -396,14 +369,20 @@ const analytics = getAnalytics(app);
   }
 
   // Render the meter right away with whatever's currently in the DOM
-  // (all unchecked, on first load) instead of waiting on Firebase.
+  // (all unchecked, on first load). This never depends on Firebase.
   updateAll();
 
   // True while checkbox states are being set programmatically from a remote
   // update, so we don't re-trigger a save and create a feedback loop.
   let applyingRemoteUpdate = false;
 
+  // progressRef stays null until (if) Firebase connects successfully.
+  // Every function below checks for it, so the checklist itself never
+  // depends on Firebase working.
+  let progressRef = null;
+
   function saveProgress(){
+    if (!progressRef) return;
     const state = {};
     checkboxes.forEach(cb => { state[cb.dataset.id] = cb.checked; });
     progressRef.set(state).catch(() => {
@@ -426,19 +405,45 @@ const analytics = getAnalytics(app);
     saveProgress();
   });
 
-  // Fires immediately with the current state on load, then again any time
-  // the state changes — including from another device.
-  progressRef.on('value', (snapshot) => {
-    const state = snapshot.val() || {};
-    applyingRemoteUpdate = true;
-    checkboxes.forEach(cb => { cb.checked = !!state[cb.dataset.id]; });
-    applyingRemoteUpdate = false;
-    updateAll();
-  });
+  // --- Firebase (optional layer) ---
+  // Paste your own config here — see the setup steps in chat.
+  // If this fails for any reason (not configured yet, offline, script
+  // blocked), the checklist above still renders and works locally —
+  // it just won't save or sync until this succeeds.
+  try {
+      // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+      const firebaseConfig = {
+        apiKey: "AIzaSyDjMAHMlVJ5FqDl8bovdJVPbGZnbz-UKPs",
+        authDomain: "study-schedule-1b5a0.firebaseapp.com",
+        databaseURL: "https://study-schedule-1b5a0-default-rtdb.firebaseio.com",
+        projectId: "study-schedule-1b5a0",
+        storageBucket: "study-schedule-1b5a0.firebasestorage.app",
+        messagingSenderId: "836373344596",
+        appId: "1:836373344596:web:b3163904495bd1272118c1",
+        measurementId: "G-Z5NW91VGFS"
+      };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    progressRef = db.ref('study-schedule-progress');
 
-  db.ref('.info/connected').on('value', (snap) => {
-    saveNote.textContent = snap.val() === true ? 'Synced across your devices' : 'Connecting…';
-  });
+    // Fires immediately with the current state on load, then again any
+    // time the state changes — including from another device.
+    progressRef.on('value', (snapshot) => {
+      const state = snapshot.val() || {};
+      applyingRemoteUpdate = true;
+      checkboxes.forEach(cb => { cb.checked = !!state[cb.dataset.id]; });
+      applyingRemoteUpdate = false;
+      updateAll();
+    }, () => {
+      saveNote.textContent = 'Could not connect — check Firebase config';
+    });
+
+    db.ref('.info/connected').on('value', (snap) => {
+      saveNote.textContent = snap.val() === true ? 'Synced across your devices' : 'Connecting…';
+    });
+  } catch (e) {
+    saveNote.textContent = 'Progress saves for this browser tab only (Firebase not set up yet)';
+  }
 })();
 </script>
 
