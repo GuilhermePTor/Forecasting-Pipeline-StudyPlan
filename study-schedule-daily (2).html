@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day-by-Day Study Schedule — Forecasting Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Firebase (compat build = plain <script> tags, no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --paper:#F6F5F0;
+    --paper-deep:#EFEEE7;
+    --grid-line: rgba(28,34,48,0.07);
+    --ink:#1C2230;
+    --ink-soft:#5B6472;
+    --mist:#9AA3AC;
+    --copper:#C8743D;
+    --copper-soft: rgba(200,116,61,0.14);
+    --pine:#2F6B58;
+    --pine-soft: rgba(47,107,88,0.14);
+    --line: rgba(28,34,48,0.14);
+    --radius: 3px;
+    font-size: 16px;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; background: var(--paper); color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+  body{
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+  }
+  .wrap{ max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  .eyebrow{ font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--copper); font-weight: 600; display:flex; align-items:center; gap: 10px; }
+  .eyebrow::before{ content:""; display:inline-block; width: 22px; height: 1px; background: var(--copper); }
+  h1{ font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: clamp(1.6rem, 4.2vw, 2.3rem);
+    line-height: 1.15; letter-spacing: -0.01em; margin: 16px 0 14px; }
+  .lede{ font-size: 1.0rem; line-height: 1.65; color: var(--ink-soft); max-width: 64ch; margin: 0 0 8px; }
+  .source-note{ font-family: 'IBM Plex Mono', monospace; font-size: 0.74rem; color: var(--mist); margin: 14px 0 36px; line-height:1.6; }
+
+  .meter-card{ border: 1px solid var(--line); background: rgba(255,255,255,0.55); border-radius: var(--radius);
+    padding: 18px 22px; margin-bottom: 44px; }
+  .meter-top{ display:flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 10px; }
+  .meter-title{ font-family:'IBM Plex Mono', monospace; font-weight:600; font-size: 0.8rem; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--ink); }
+  .meter-stat{ font-family:'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--ink-soft); }
+  .meter-track{ height: 8px; width: 100%; background: var(--paper-deep); border: 1px solid var(--line);
+    border-radius: 2px; overflow:hidden; }
+  .meter-fill{ height: 100%; width: 0%; background: linear-gradient(90deg, var(--copper), var(--pine)); transition: width 0.4s ease; }
+  .meter-foot{ margin-top: 10px; font-size: 0.86rem; color: var(--ink-soft); }
+  .meter-foot b{ color: var(--ink); }
+
+  details.week{ border: 1px solid var(--line); background: rgba(255,255,255,0.55); border-radius: var(--radius);
+    margin-bottom: 18px; overflow:hidden; }
+  details.week[open]{ background: rgba(255,255,255,0.7); }
+  summary.week-summary{ cursor:pointer; list-style:none; padding:18px 22px; display:flex; align-items:center; gap:14px; }
+  summary.week-summary::-webkit-details-marker{ display:none; }
+  summary.week-summary::marker{ content:''; }
+  summary.week-summary:focus-visible{ outline: 2px solid var(--copper); outline-offset: 2px; }
+
+  .week-num{ width:32px; height:32px; min-width:32px; border-radius:50%; background: var(--paper);
+    border: 2px solid var(--mist); display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 700; color: var(--ink-soft);
+    transition: all 0.3s ease; }
+  .week-num.is-active{ border-color: var(--copper); color: var(--copper); background: var(--copper-soft); }
+  .week-num.is-complete{ border-color: var(--pine); background: var(--pine); color: #fff; }
+
+  .week-head-text{ flex:1; min-width:0; }
+  .week-title{ font-family:'IBM Plex Mono', monospace; font-weight: 700; font-size: 1.02rem; margin: 0 0 3px; color: var(--ink); }
+  .week-sub{ font-size: 0.82rem; color: var(--ink-soft); }
+  .week-badge{ flex-shrink:0; font-family:'IBM Plex Mono', monospace; font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.03em; color: var(--copper); border: 1px solid var(--copper); border-radius: 20px;
+    padding: 3px 10px; white-space: nowrap; }
+  .chevron{ width:9px; height:9px; border-right:2px solid var(--ink-soft); border-bottom:2px solid var(--ink-soft);
+    transform:rotate(-45deg); transition: transform .25s ease; flex-shrink:0; margin-left:2px; }
+  details[open] .chevron{ transform:rotate(45deg); }
+
+  .week-body{ padding: 0 22px 22px; }
+  .week-why{ font-size: 0.88rem; color: var(--ink-soft); line-height: 1.55; margin: 0 0 16px; max-width: 60ch; }
+
+  .day-block{ border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 12px; }
+  .day-block:first-child{ border-top: none; padding-top: 0; margin-top: 0; }
+  .day-head{ display:flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; gap:8px; }
+  .day-num{ font-family:'IBM Plex Mono', monospace; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--ink); }
+  .day-time{ font-family:'IBM Plex Mono', monospace; font-size: 0.68rem; color: var(--mist); white-space:nowrap; }
+
+  ul.checklist{ list-style: none; margin: 0; padding: 0; }
+  .checklist li{ display:flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .checklist li:last-child{ border-bottom: none; }
+  .checklist input[type="checkbox"]{ appearance: none; -webkit-appearance: none; width: 17px; height: 17px;
+    min-width: 17px; margin-top: 2px; border: 1.5px solid var(--ink-soft); border-radius: 3px; background: #fff;
+    cursor: pointer; position: relative; transition: all 0.15s ease; }
+  .checklist input[type="checkbox"]:hover{ border-color: var(--copper); }
+  .checklist input[type="checkbox"]:checked{ background: var(--pine); border-color: var(--pine); }
+  .checklist input[type="checkbox"]:checked::after{ content:""; position:absolute; left: 4px; top: 0.5px;
+    width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(40deg); }
+  .checklist input[type="checkbox"]:focus-visible{ outline: 2px solid var(--copper); outline-offset: 2px; }
+
+  .checklist label{ font-size: 0.9rem; line-height: 1.5; color: var(--ink); cursor: pointer; flex:1; }
+  .checklist input:checked + label{ color: var(--ink-soft); text-decoration: line-through; text-decoration-color: var(--mist); text-decoration-thickness: 1px; }
+  .checklist label code{ font-family:'IBM Plex Mono', monospace; font-size: 0.85em; background: var(--paper-deep);
+    padding: 1px 5px; border-radius: 3px; color: var(--ink); }
+  .checklist input:checked + label code{ color: var(--ink-soft); }
+
+  .task-link{ flex-shrink:0; color: var(--copper); text-decoration:none; font-size:0.78rem; margin-top:2px; }
+  .task-link:hover{ text-decoration:underline; }
+  .min-tag{ flex-shrink:0; font-family:'IBM Plex Mono', monospace; font-size: 0.66rem; color: var(--ink-soft);
+    background: var(--paper-deep); border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px;
+    white-space:nowrap; margin-top:1px; }
+
+  footer{ margin-top: 40px; display:flex; justify-content: space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+  .save-note{ font-family:'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--mist); }
+  .reset-btn{ font-family:'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--ink-soft); background: transparent;
+    border: 1px solid var(--line); border-radius: 20px; padding: 6px 14px; cursor:pointer; transition: all .15s ease; }
+  .reset-btn:hover{ border-color: var(--copper); color: var(--copper); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">Day-by-Day Schedule</div>
+  <h1>Study Plan — 1 Hour a Day</h1>
+  <p class="lede">
+    Every concept, resource, and exercise from your <strong>Reading the Forecasting Pipeline</strong> guide,
+    split into 42 daily sessions at roughly an hour each — the pace you picked. Check items off as you go;
+    time remaining updates automatically.
+  </p>
+  <p class="source-note">Estimates are planning targets, not hard limits — some days run a little long, some a little short. That's expected at this pace over 6 weeks.</p>
+
+  <div class="meter-card">
+    <div class="meter-top">
+      <span class="meter-title">Progress</span>
+      <span class="meter-stat" id="meter-stat">0 / 0 tasks · 0%</span>
+    </div>
+    <div class="meter-track"><div class="meter-fill" id="meter-fill"></div></div>
+    <p class="meter-foot" id="meter-foot">Loading schedule…</p>
+  </div>
+
+  <div id="weeks"></div>
+
+  <footer>
+    <span class="save-note" id="save-note">Progress saves automatically</span>
+    <button class="reset-btn" id="reset-btn" type="button">Reset all progress</button>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  const WEEKS = [
+    { num:"01", title:"Time-Series Fundamentals", sub:"Phase 3",
+      why:"Why a forecasting pipeline is built differently from a normal ML model — order matters, and you can't shuffle time.",
+      days:[
+        {day:1, tasks:[
+          {label:`Trend, seasonality, noise, forecast horizon`, min:45, url:`https://otexts.com/fpp3/tspatterns.html`},
+          {label:`Stationarity — basic intuition only, no tests needed yet`, min:20, url:`https://towardsdatascience.com/time-series-stationarity-simply-explained-125269968154/`}
+        ]},
+        {day:2, tasks:[
+          {label:`StatQuest — Time Series Forecasting`, min:30, url:`https://www.youtube.com/results?search_query=statquest+time+series+forecasting`},
+          {label:`Sampling frequency (your data is 15-minute) and what it means for lag sizes`, min:30, url:`https://www.geeksforgeeks.org/machine-learning/what-is-lag-in-time-series-forecasting/`}
+        ]},
+        {day:3, tasks:[
+          {label:`Hyndman &amp; Athanasopoulos, <em>Forecasting: Principles and Practice</em> — reading, part 1 of 3`, min:60, url:`https://otexts.com/fpp3/`}
+        ]},
+        {day:4, tasks:[
+          {label:`FPP3 reading, part 2 of 3`, min:60, url:`https://otexts.com/fpp3/`}
+        ]},
+        {day:5, tasks:[
+          {label:`FPP3 reading, part 3 of 3`, min:60, url:`https://otexts.com/fpp3/`}
+        ]},
+        {day:6, tasks:[
+          {label:`Time-based train/test splits — why random shuffling leaks the future`, min:30, url:`https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html`},
+          {label:`Walk-forward validation — Jan→Feb, Jan-Feb→Mar, Jan-Mar→Apr`, min:30, url:`https://machinelearningmastery.com/backtest-machine-learning-models-time-series-forecasting/`},
+          {label:`StatQuest — Cross Validation`, min:20, url:`https://www.youtube.com/watch?v=fSytzGwwBVw`}
+        ]},
+        {day:7, tasks:[
+          {label:`Google Machine Learning Crash Course — time series unit only`, min:45, url:`https://developers.google.com/machine-learning/crash-course`},
+          {label:`Practical: recreate <code>lag_1</code>, <code>lag_96</code>, <code>rolling_mean_96</code> by hand in pandas`, min:45}
+        ]}
+      ]
+    },
+    { num:"02", title:"Feature Engineering", sub:"Phase 4",
+      why:"The single most important topic in your script — nearly every prediction depends on these features.",
+      days:[
+        {day:8, tasks:[
+          {label:`Lag features — why <code>lag_1</code>, <code>lag_96</code>, <code>lag_672</code> specifically were chosen`, min:40, url:`https://scikit-learn.org/stable/auto_examples/applications/plot_time_series_lagged_features.html`},
+          {label:`Calendar features — hour, weekday, month, weekend`, min:20, url:`https://pandas.pydata.org/docs/user_guide/timeseries.html`}
+        ]},
+        {day:9, tasks:[
+          {label:`Rolling windows — mean, std, max, min, and why they smooth noise`, min:30, url:`https://pandas.pydata.org/docs/user_guide/window.html`},
+          {label:`Cyclical encoding — why <code>sin(hour)</code>/<code>cos(hour)</code> make 23 and 0 close`, min:30, url:`https://scikit-learn.org/stable/auto_examples/applications/plot_cyclical_feature_engineering.html`}
+        ]},
+        {day:10, tasks:[
+          {label:`Target encoding — meter ID → average pressure, not an integer label`, min:30, url:`https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.TargetEncoder.html`},
+          {label:`StatQuest — One-Hot, Label &amp; Target Encoding, Clearly Explained`, min:20, url:`https://www.youtube.com/watch?v=589nCGeWG1w`}
+        ]},
+        {day:11, tasks:[
+          {label:`Kaggle Learn — Feature Engineering, part 1 of 3`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
+        ]},
+        {day:12, tasks:[
+          {label:`Kaggle Learn — Feature Engineering, part 2 of 3`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
+        ]},
+        {day:13, tasks:[
+          {label:`Kaggle Learn — Feature Engineering, part 3 of 3`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
+        ]},
+        {day:14, tasks:[
+          {label:`Practical: rebuild the feature-engineering section of your script from scratch, unaided`, min:90}
+        ]}
+      ]
+    },
+    { num:"03", title:"LightGBM + Optuna — part 1 of 2", sub:"Phase 5",
+      why:"The biggest topic. Decision trees, gradient boosting, and why LightGBM works.",
+      days:[
+        {day:15, tasks:[{label:`Decision trees — how a split like "pressure &gt; 20?" divides data`, min:60, url:`https://www.youtube.com/watch?v=_L39rN6gz7Y`}]},
+        {day:16, tasks:[{label:`Gradient boosting — tree 1 → residuals → tree 2 → residuals → tree 3`, min:60, url:`https://www.youtube.com/watch?v=3CC4N4z3GJc`}]},
+        {day:17, tasks:[{label:`StatQuest playlist — Decision Trees + Gradient Boost (session 1 of 2)`, min:70, url:`https://www.youtube.com/results?search_query=statquest+decision+trees+gradient+boost+lightgbm`}]},
+        {day:18, tasks:[{label:`LightGBM specifics — leaves, splits, histogram bins, feature importance, regression objective`, min:60, url:`https://lightgbm.readthedocs.io/en/latest/Features.html`}]},
+        {day:19, tasks:[{label:`StatQuest — XGBoost Part 1: Regression (closest video analogue to LightGBM's boosting mechanics)`, min:70, url:`https://www.youtube.com/watch?v=OtD8wVaFm6E`}]},
+        {day:20, tasks:[{label:`LightGBM docs — Quick Start + Parameters`, min:60, url:`https://lightgbm.readthedocs.io/`}]},
+        {day:21, tasks:[{label:`LightGBM docs — Python API`, min:45, url:`https://lightgbm.readthedocs.io/`}]}
+      ]
+    },
+    { num:"04", title:"LightGBM + Optuna — part 2 of 2", sub:"Phase 5",
+      why:"Quantile regression, Optuna tuning, and hands-on practice with your own hyperparameters.",
+      days:[
+        {day:22, tasks:[{label:`Quantile regression — training median, 5%, and 95% instead of just the mean`, min:55, url:`https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_quantile.html`}]},
+        {day:23, tasks:[{label:`Optuna — study → trial → objective → best parameters (no Bayesian math needed)`, min:55, url:`https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/001_first.html`}]},
+        {day:24, tasks:[{label:`scikit-learn — Tuning hyperparameters (grid vs. random search, the ideas Optuna automates)`, min:40, url:`https://scikit-learn.org/stable/modules/grid_search.html`}]},
+        {day:25, tasks:[{label:`Optuna docs — First Optimization + Study + Trial`, min:60, url:`https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/001_first.html`}]},
+        {day:26, tasks:[{label:`Practical, part 1: tune <code>num_leaves</code> and <code>learning_rate</code> one at a time, observe the effect`, min:60}]},
+        {day:27, tasks:[{label:`Practical, part 2: tune <code>max_depth</code> and <code>min_data_in_leaf</code> one at a time, observe the effect`, min:60}]},
+        {day:28, tasks:[{label:`Review: re-read <code>train_models()</code> and the <code>objective()</code> function against everything from this week`, min:45}]}
+      ]
+    },
+    { num:"05", title:"Forecasting + Conformal Prediction", sub:"Phase 6",
+      why:"Where your script becomes production-grade — turning one-step predictions into a calibrated multi-day forecast.",
+      days:[
+        {day:29, tasks:[
+          {label:`Recursive forecasting — predict t+1, append it, predict t+2, and so on`, min:30, url:`https://skforecast.org/latest/user_guides/autoregressive-forecaster.html`},
+          {label:`Direct vs. recursive vs. hybrid multi-step forecasting`, min:30, url:`https://machinelearningmastery.com/multi-step-time-series-forecasting/`}
+        ]},
+        {day:30, tasks:[
+          {label:`Prediction intervals — predicting a range like 20–30 instead of a single 25`, min:30, url:`https://otexts.com/fpp3/prediction-intervals.html`},
+          {label:`StatQuest — Conformal Prediction`, min:25, url:`https://www.youtube.com/results?search_query=statquest+conformal+prediction`}
+        ]},
+        {day:31, tasks:[{label:`Conformal prediction — calibrating intervals when reality falls outside them`, min:75, url:`https://arxiv.org/abs/2107.07511`}]},
+        {day:32, tasks:[{label:`MAPIE documentation — Introduction`, min:60, url:`https://mapie.readthedocs.io/`}]},
+        {day:33, tasks:[{label:`MAPIE documentation — Examples`, min:60, url:`https://mapie.readthedocs.io/`}]},
+        {day:34, tasks:[{label:`Practical: draw intervals on paper for 5 predictions and compute coverage by hand`, min:45}]},
+        {day:35, tasks:[{label:`Review: trace the calibration code in your own script, line by line`, min:45}]}
+      ]
+    },
+    { num:"06", title:"Production ML", sub:"Phase 7",
+      why:"The engineering wrapper around the model — why models degrade, and how trained models get deployed and watched.",
+      days:[
+        {day:36, tasks:[
+          {label:`Logging — why <code>logger.info(...)</code> instead of <code>print(...)</code>`, min:20, url:`https://docs.python.org/3/howto/logging.html`},
+          {label:`Model serialization — <code>joblib.dump()</code> and <code>joblib.load()</code>`, min:20, url:`https://scikit-learn.org/stable/model_persistence.html`},
+          {label:`Metadata — why you save features, encoder, units, parameters, training date`, min:20, url:`https://cloud.google.com/blog/products/ai-machine-learning/create-a-model-card-with-scikit-learn`}
+        ]},
+        {day:37, tasks:[
+          {label:`Drift monitoring — concept drift, feature drift, prediction drift`, min:45, url:`https://www.evidentlyai.com/ml-in-production/concept-drift`},
+          {label:`Deployment basics — train → save model → load model → predict`, min:30, url:`https://apxml.com/courses/basics-ml-deployment/chapter-2-preparing-model-deployment/practice-save-load-model`}
+        ]},
+        {day:38, tasks:[{label:`Google's Rules of Machine Learning — read all of it`, min:90, url:`https://developers.google.com/machine-learning/guides/rules-of-ml`}]},
+        {day:39, tasks:[{label:`Made With ML — Data Drift + Monitoring`, min:60, url:`https://madewithml.com/`}]},
+        {day:40, tasks:[{label:`Made With ML — Model Registry + Production ML`, min:60, url:`https://madewithml.com/`}]},
+        {day:41, tasks:[{label:`Evidently AI docs — Data Drift, PSI, Monitoring`, min:60, url:`https://docs.evidentlyai.com/`}]},
+        {day:42, tasks:[{label:`Practical: add structured logging and joblib persistence to a small script of your own`, min:90}]}
+      ]
+    }
+  ];
+
+  // Paste your own Firebase config here — see the setup steps in chat.
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const progressRef = db.ref('study-schedule-progress');
+
+  function fmtHM(min){
+    const h = Math.floor(min/60), m = Math.round(min%60);
+    if (h <= 0) return m + 'm';
+    if (m === 0) return h + 'h';
+    return h + 'h ' + m + 'm';
+  }
+
+  // Build task list with global unique ids, and week/day totals
+  const allTasks = [];
+  WEEKS.forEach((week, wi) => {
+    let weekMin = 0;
+    week.days.forEach(d => { d.min = d.tasks.reduce((a,t)=>a+t.min,0); weekMin += d.min; });
+    week.totalMin = weekMin;
+    week.days.forEach(d => {
+      d.tasks.forEach((t, ti) => {
+        t.id = 'w' + wi + '-d' + d.day + '-t' + ti;
+        allTasks.push(t);
+      });
+    });
+  });
+  const totalMinutes = allTasks.reduce((a,t)=>a+t.min,0);
+  const totalTasks = allTasks.length;
+  const totalDays = WEEKS.reduce((a,w)=>a+w.days.length,0);
+
+  const weeksEl = document.getElementById('weeks');
+  const meterFill = document.getElementById('meter-fill');
+  const meterStat = document.getElementById('meter-stat');
+  const meterFoot = document.getElementById('meter-foot');
+  const saveNote = document.getElementById('save-note');
+  const resetBtn = document.getElementById('reset-btn');
+
+  // Render
+  let html = '';
+  WEEKS.forEach((week, wi) => {
+    html += `<details class="week" id="week-${wi}"${wi===0 ? ' open' : ''}>`;
+    html += `<summary class="week-summary">`;
+    html += `<span class="week-num" id="week-num-${wi}">${week.num}</span>`;
+    html += `<span class="week-head-text"><div class="week-title">Week ${wi+1} — ${week.title}</div><div class="week-sub">${week.sub}</div></span>`;
+    html += `<span class="week-badge">${fmtHM(week.totalMin)}</span>`;
+    html += `<span class="chevron"></span>`;
+    html += `</summary>`;
+    html += `<div class="week-body">`;
+    html += `<p class="week-why">${week.why}</p>`;
+    week.days.forEach(d => {
+      html += `<div class="day-block">`;
+      html += `<div class="day-head"><span class="day-num">Day ${d.day}</span><span class="day-time">~${fmtHM(d.min)}</span></div>`;
+      html += `<ul class="checklist">`;
+      d.tasks.forEach(t => {
+        html += `<li><input type="checkbox" id="${t.id}" data-id="${t.id}" data-min="${t.min}">`;
+        html += `<label for="${t.id}">${t.label}</label>`;
+        if (t.url) html += `<a class="task-link" href="${t.url}" target="_blank" rel="noopener">↗</a>`;
+        html += `<span class="min-tag">${t.min}m</span></li>`;
+      });
+      html += `</ul></div>`;
+    });
+    html += `</div></details>`;
+  });
+  weeksEl.innerHTML = html;
+
+  const checkboxes = Array.from(document.querySelectorAll('.checklist input[type="checkbox"]'));
+
+  function updateAll(){
+    const checkedMin = checkboxes.filter(cb=>cb.checked).reduce((a,cb)=>a+Number(cb.dataset.min),0);
+    const checkedCount = checkboxes.filter(cb=>cb.checked).length;
+    const pct = totalMinutes ? Math.round((checkedMin/totalMinutes)*100) : 0;
+
+    meterFill.style.width = pct + '%';
+    meterStat.textContent = checkedCount + ' / ' + totalTasks + ' tasks · ' + pct + '%';
+
+    WEEKS.forEach((week, wi) => {
+      const weekCbs = checkboxes.filter(cb => cb.dataset.id.startsWith('w'+wi+'-'));
+      const weekChecked = weekCbs.filter(cb=>cb.checked).length;
+      const numEl = document.getElementById('week-num-'+wi);
+      numEl.classList.remove('is-active','is-complete');
+      if (weekChecked === weekCbs.length){ numEl.classList.add('is-complete'); numEl.textContent = '✓'; }
+      else if (weekChecked > 0){ numEl.classList.add('is-active'); numEl.textContent = week.num; }
+      else { numEl.textContent = week.num; }
+    });
+
+    const remainingMin = totalMinutes - checkedMin;
+    const daysLeft = totalDays - Math.floor((checkedMin/totalMinutes) * totalDays);
+    if (remainingMin <= 0){
+      meterFoot.innerHTML = "All 42 days checked off — you're through the plan.";
+    } else {
+      meterFoot.innerHTML = 'About <b>' + fmtHM(remainingMin) + '</b> of study left, roughly <b>' + Math.max(daysLeft,1) + '</b> days at this pace.';
+    }
+  }
+
+  // Render the meter right away with whatever's currently in the DOM
+  // (all unchecked, on first load) instead of waiting on Firebase.
+  updateAll();
+
+  // True while checkbox states are being set programmatically from a remote
+  // update, so we don't re-trigger a save and create a feedback loop.
+  let applyingRemoteUpdate = false;
+
+  function saveProgress(){
+    const state = {};
+    checkboxes.forEach(cb => { state[cb.dataset.id] = cb.checked; });
+    progressRef.set(state).catch(() => {
+      saveNote.textContent = 'Could not sync — check your connection';
+    });
+  }
+
+  checkboxes.forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (applyingRemoteUpdate) return;
+      updateAll();
+      saveProgress();
+    });
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if (!confirm("Reset all checked progress? This can't be undone.")) return;
+    checkboxes.forEach(cb => { cb.checked = false; });
+    updateAll();
+    saveProgress();
+  });
+
+  // Fires immediately with the current state on load, then again any time
+  // the state changes — including from another device.
+  progressRef.on('value', (snapshot) => {
+    const state = snapshot.val() || {};
+    applyingRemoteUpdate = true;
+    checkboxes.forEach(cb => { cb.checked = !!state[cb.dataset.id]; });
+    applyingRemoteUpdate = false;
+    updateAll();
+  });
+
+  db.ref('.info/connected').on('value', (snap) => {
+    saveNote.textContent = snap.val() === true ? 'Synced across your devices' : 'Connecting…';
+  });
+})();
+</script>
+
+</body>
+</html>
