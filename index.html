@@ -10,6 +10,7 @@
 <!-- Firebase (compat build = plain <script> tags, no bundler needed) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
     --paper:#F6F5F0;
@@ -125,7 +126,15 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+
+  <div id="login-gate">
+    <input type="email" id="login-email" placeholder="Email">
+    <input type="password" id="login-password" placeholder="Password">
+    <button id="login-btn" type="button">Sign in</button>
+  </div>
+  
+  <div id="app">
+  <div class="wrap">
 
   <div class="eyebrow">Day-by-Day Schedule</div>
   <h1>Study Plan — 1 Hour a Day</h1>
@@ -147,11 +156,13 @@
 
   <div id="weeks"></div>
 
+ 
+ 
   <footer>
     <span class="save-note" id="save-note">Progress saves automatically</span>
     <button class="reset-btn" id="reset-btn" type="button">Reset all progress</button>
   </footer>
-
+</div>
 </div>
 
 <script>
@@ -422,28 +433,57 @@
         appId: "1:836373344596:web:b3163904495bd1272118c1",
         measurementId: "G-Z5NW91VGFS"
       };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    progressRef = db.ref('study-schedule-progress');
+  };
 
-    // Fires immediately with the current state on load, then again any
-    // time the state changes — including from another device.
+  firebase.initializeApp(firebaseConfig);
+
+  // Show/hide the app depending on whether the user is signed in
+  firebase.auth().onAuthStateChanged(user => {
+    document.getElementById('login-gate').style.display = user ? 'none' : 'block';
+    document.getElementById('app').style.display = user ? 'block' : 'none';
+
+    if (!user) return;
+
+    const db = firebase.database();
+    progressRef = db.ref('study-schedule-progress/' + user.uid);
+
+    // Load the user's saved progress
     progressRef.on('value', (snapshot) => {
       const state = snapshot.val() || {};
+
       applyingRemoteUpdate = true;
-      checkboxes.forEach(cb => { cb.checked = !!state[cb.dataset.id]; });
+      checkboxes.forEach(cb => {
+        cb.checked = !!state[cb.dataset.id];
+      });
       applyingRemoteUpdate = false;
+
       updateAll();
     }, () => {
       saveNote.textContent = 'Could not connect — check Firebase config';
     });
 
     db.ref('.info/connected').on('value', (snap) => {
-      saveNote.textContent = snap.val() === true ? 'Synced across your devices' : 'Connecting…';
+      saveNote.textContent =
+        snap.val() === true
+          ? 'Synced across your devices'
+          : 'Connecting…';
     });
-  } catch (e) {
-    saveNote.textContent = 'Progress saves for this browser tab only (Firebase not set up yet)';
-  }
+  });
+
+  // Login button
+  document.getElementById('login-btn').addEventListener('click', () => {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+
+    firebase.auth()
+      .signInWithEmailAndPassword(email, password)
+      .catch(err => alert(err.message));
+  });
+
+} catch (e) {
+  saveNote.textContent =
+    'Progress saves for this browser tab only (Firebase not set up yet)';
+}
 })();
 </script>
 
