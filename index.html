@@ -132,7 +132,7 @@
     <input type="password" id="login-password" placeholder="Password">
     <button id="login-btn" type="button">Sign in</button>
   </div>
-  
+
   <div id="app">
   <div class="wrap">
 
@@ -143,7 +143,7 @@
     split into 42 daily sessions at roughly an hour each — the pace you picked. Check items off as you go;
     time remaining updates automatically.
   </p>
-  <p class="source-note">Estimates are planning targets, not hard limits — some days run a little long, some a little short. That's expected at this pace over 6 weeks.</p>
+  <p class="source-note">Estimates are planning targets, not hard limits — some days run a little long, some a little short. That's expected at this pace over 6 weeks. v2: added smoothed target encoding, log1p/expm1 transforms, winsorization, pinball loss, Optuna pruning, joblib parallelism, and a PSI deep-dive to match script2_fixed_v2.py.</p>
 
   <div class="meter-card">
     <div class="meter-top">
@@ -156,8 +156,8 @@
 
   <div id="weeks"></div>
 
- 
- 
+
+
   <footer>
     <span class="save-note" id="save-note">Progress saves automatically</span>
     <button class="reset-btn" id="reset-btn" type="button">Reset all progress</button>
@@ -199,8 +199,8 @@
         ]}
       ]
     },
-    { num:"02", title:"Feature Engineering", sub:"Phase 4",
-      why:"The single most important topic in your script — nearly every prediction depends on these features.",
+    { num:"02", title:"Feature Engineering + Target Prep", sub:"Phase 4",
+      why:"The single most important topic in your script — nearly every prediction depends on these features, and on how the target is clipped and log-transformed before training.",
       days:[
         {day:8, tasks:[
           {label:`Lag features — why <code>lag_1</code>, <code>lag_96</code>, <code>lag_672</code> specifically were chosen`, min:40, url:`https://scikit-learn.org/stable/auto_examples/applications/plot_time_series_lagged_features.html`},
@@ -211,17 +211,20 @@
           {label:`Cyclical encoding — why <code>sin(hour)</code>/<code>cos(hour)</code> make 23 and 0 close`, min:30, url:`https://scikit-learn.org/stable/auto_examples/applications/plot_cyclical_feature_engineering.html`}
         ]},
         {day:10, tasks:[
-          {label:`Target encoding — meter ID → average pressure, not an integer label`, min:30, url:`https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.TargetEncoder.html`},
-          {label:`StatQuest — One-Hot, Label &amp; Target Encoding, Clearly Explained`, min:20, url:`https://www.youtube.com/watch?v=589nCGeWG1w`}
+          {label:`Smoothed (James-Stein) target encoding — why your script shrinks each meter's mean toward the global mean instead of using raw averages`, min:35, url:`https://maxhalford.github.io/blog/target-encoding/`},
+          {label:`StatQuest — One-Hot, Label &amp; Target Encoding, Clearly Explained`, min:20, url:`https://www.youtube.com/watch?v=589nCGeWG1w`},
+          {label:`Trace <code>fit_target_encoder()</code> in your script — find the smoothing factor k and the log1p inside it`, min:10}
         ]},
         {day:11, tasks:[
-          {label:`Kaggle Learn — Feature Engineering, part 1 of 3`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
+          {label:`Kaggle Learn — Feature Engineering, part 1 of 2`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
         ]},
         {day:12, tasks:[
-          {label:`Kaggle Learn — Feature Engineering, part 2 of 3`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
+          {label:`Kaggle Learn — Feature Engineering, part 2 of 2`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
         ]},
         {day:13, tasks:[
-          {label:`Kaggle Learn — Feature Engineering, part 3 of 3`, min:60, url:`https://www.kaggle.com/learn/feature-engineering`}
+          {label:`Target transforms — <code>log1p</code> before training, <code>expm1</code> after predicting, and why right-skewed pressure data needs it`, min:30, url:`https://otexts.com/fpp3/transformations.html`},
+          {label:`Winsorization / quantile clipping — the idea behind <code>clip_per_meter</code> and the y-clip in <code>prepare_Xy</code>`, min:20, url:`https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.winsorize.html`},
+          {label:`Trace <code>prepare_Xy()</code> — quantile clip → log1p → NaN/Inf guard, in that order, and why the order matters`, min:15}
         ]},
         {day:14, tasks:[
           {label:`Practical: rebuild the feature-engineering section of your script from scratch, unaided`, min:90}
@@ -241,15 +244,18 @@
       ]
     },
     { num:"04", title:"LightGBM + Optuna — part 2 of 2", sub:"Phase 5",
-      why:"Quantile regression, Optuna tuning, and hands-on practice with your own hyperparameters.",
+      why:"Quantile regression, pinball loss, Optuna tuning with pruning, and hands-on practice with your own hyperparameters.",
       days:[
-        {day:22, tasks:[{label:`Quantile regression — training median, 5%, and 95% instead of just the mean`, min:55, url:`https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_quantile.html`}]},
+        {day:22, tasks:[
+          {label:`Quantile regression — training median, 5%, and 95% instead of just the mean`, min:40, url:`https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_quantile.html`},
+          {label:`Pinball (check) loss — the asymmetric loss your P05/P95 Optuna objectives minimise`, min:20, url:`https://scikit-learn.org/stable/modules/model_evaluation.html#pinball-loss`}
+        ]},
         {day:23, tasks:[{label:`Optuna — study → trial → objective → best parameters (no Bayesian math needed)`, min:55, url:`https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/001_first.html`}]},
         {day:24, tasks:[{label:`scikit-learn — Tuning hyperparameters (grid vs. random search, the ideas Optuna automates)`, min:40, url:`https://scikit-learn.org/stable/modules/grid_search.html`}]},
-        {day:25, tasks:[{label:`Optuna docs — First Optimization + Study + Trial`, min:60, url:`https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/001_first.html`}]},
+        {day:25, tasks:[{label:`Optuna docs — Samplers + Pruners: why the TPE sampler picks smart candidates and how the pruner kills bad trials early (your script uses both)`, min:60, url:`https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algos.html`}]},
         {day:26, tasks:[{label:`Practical, part 1: tune <code>num_leaves</code> and <code>learning_rate</code> one at a time, observe the effect`, min:60}]},
         {day:27, tasks:[{label:`Practical, part 2: tune <code>max_depth</code> and <code>min_data_in_leaf</code> one at a time, observe the effect`, min:60}]},
-        {day:28, tasks:[{label:`Review: re-read <code>train_models()</code> and the <code>objective()</code> function against everything from this week`, min:45}]}
+        {day:28, tasks:[{label:`Review: re-read <code>make_objective()</code> and <code>run_optuna()</code> against everything from this week — spot the pinball loss, the pruning callback, and the three separate studies`, min:45}]}
       ]
     },
     { num:"05", title:"Forecasting + Conformal Prediction", sub:"Phase 6",
@@ -261,13 +267,13 @@
         ]},
         {day:30, tasks:[
           {label:`Prediction intervals — predicting a range like 20–30 instead of a single 25`, min:30, url:`https://otexts.com/fpp3/prediction-intervals.html`},
-          {label:`StatQuest — Conformal Prediction`, min:25, url:`https://www.youtube.com/results?search_query=statquest+conformal+prediction`}
+          {label:`Conformal prediction video tutorial (Angelopoulos) — pairs with tomorrow's paper`, min:25, url:`https://www.youtube.com/results?search_query=conformal+prediction+tutorial+angelopoulos`}
         ]},
-        {day:31, tasks:[{label:`Conformal prediction — calibrating intervals when reality falls outside them`, min:75, url:`https://arxiv.org/abs/2107.07511`}]},
+        {day:31, tasks:[{label:`Conformal prediction — calibrating intervals when reality falls outside them (Gentle Introduction paper, sections 1–2)`, min:75, url:`https://arxiv.org/abs/2107.07511`}]},
         {day:32, tasks:[{label:`MAPIE documentation — Introduction`, min:60, url:`https://mapie.readthedocs.io/`}]},
-        {day:33, tasks:[{label:`MAPIE documentation — Examples`, min:60, url:`https://mapie.readthedocs.io/`}]},
+        {day:33, tasks:[{label:`MAPIE documentation — Examples (focus on split conformal &amp; CQR — your script implements split conformal by hand, per lead-time bucket)`, min:60, url:`https://mapie.readthedocs.io/`}]},
         {day:34, tasks:[{label:`Practical: draw intervals on paper for 5 predictions and compute coverage by hand`, min:45}]},
-        {day:35, tasks:[{label:`Review: trace the calibration code in your own script, line by line`, min:45}]}
+        {day:35, tasks:[{label:`Review: trace <code>conformal_calibration()</code> and the lead-time buckets (<code>_bucket_boundaries</code>, <code>STEP_BUCKET</code>, per-meter fallback) line by line`, min:45}]}
       ]
     },
     { num:"06", title:"Production ML", sub:"Phase 7",
@@ -276,7 +282,8 @@
         {day:36, tasks:[
           {label:`Logging — why <code>logger.info(...)</code> instead of <code>print(...)</code>`, min:20, url:`https://docs.python.org/3/howto/logging.html`},
           {label:`Model serialization — <code>joblib.dump()</code> and <code>joblib.load()</code>`, min:20, url:`https://scikit-learn.org/stable/model_persistence.html`},
-          {label:`Metadata — why you save features, encoder, units, parameters, training date`, min:20, url:`https://cloud.google.com/blog/products/ai-machine-learning/create-a-model-card-with-scikit-learn`}
+          {label:`Metadata — why you save features, encoder, units, parameters, training date`, min:20, url:`https://cloud.google.com/blog/products/ai-machine-learning/create-a-model-card-with-scikit-learn`},
+          {label:`joblib <code>Parallel</code>/<code>delayed</code> — how <code>dynamic_forecast</code> runs 6 meters at once on your P-cores`, min:15, url:`https://joblib.readthedocs.io/en/latest/parallel.html`}
         ]},
         {day:37, tasks:[
           {label:`Drift monitoring — concept drift, feature drift, prediction drift`, min:45, url:`https://www.evidentlyai.com/ml-in-production/concept-drift`},
@@ -285,7 +292,10 @@
         {day:38, tasks:[{label:`Google's Rules of Machine Learning — read all of it`, min:90, url:`https://developers.google.com/machine-learning/guides/rules-of-ml`}]},
         {day:39, tasks:[{label:`Made With ML — Data Drift + Monitoring`, min:60, url:`https://madewithml.com/`}]},
         {day:40, tasks:[{label:`Made With ML — Model Registry + Production ML`, min:60, url:`https://madewithml.com/`}]},
-        {day:41, tasks:[{label:`Evidently AI docs — Data Drift, PSI, Monitoring`, min:60, url:`https://docs.evidentlyai.com/`}]},
+        {day:41, tasks:[
+          {label:`Evidently AI docs — Data Drift &amp; Monitoring overview`, min:45, url:`https://docs.evidentlyai.com/`},
+          {label:`PSI deep-dive — how the index is computed bin by bin, and the 0.1 / 0.2 thresholds behind your script's <code>DRIFT_PSI_THRESHOLD</code>`, min:25, url:`https://arize.com/blog-course/population-stability-index-psi/`}
+        ]},
         {day:42, tasks:[{label:`Practical: add structured logging and joblib persistence to a small script of your own`, min:90}]}
       ]
     }
